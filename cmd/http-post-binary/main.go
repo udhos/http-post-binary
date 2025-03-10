@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 )
 
-const version = "0.0.1"
+const version = "0.0.2"
 
 func main() {
 	infof("http-post-binary %s", version)
@@ -20,21 +23,46 @@ func main() {
 	var fullURL string
 	var size int
 	var contentType string
+	var interval string
 
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.StringVar(&fullURL, "url", "http://localhost:8080/test", "url")
 	flag.IntVar(&size, "size", 1000, "body size")
 	flag.StringVar(&contentType, "contentType", "application/octet-stream", "content-type")
+	flag.StringVar(&interval, "interval", "0-255", "byte random interval")
 	flag.Parse()
 
 	if showVersion {
 		return
 	}
 
-	infof("request size=%d url=%s content_type=%s",
-		size, fullURL, contentType)
+	first, last, found := strings.Cut(interval, "-")
+	if !found {
+		fatalf("bad interval: %s", interval)
+	}
+
+	byteMin, errMin := strconv.Atoi(first)
+	if errMin != nil {
+		fatalf("bad interval min: %s: %v", first, errMin)
+	}
+	byteMax, errMax := strconv.Atoi(last)
+	if errMax != nil {
+		fatalf("bad interval max: %s: %v", last, errMax)
+	}
+
+	if byteMin > byteMax {
+		fatalf("interval min=%d > max=%d", byteMin, byteMax)
+	}
+
+	infof("request size=%d url=%s content_type=%s interval=%d-%d",
+		size, fullURL, contentType, byteMin, byteMax)
 
 	reqBuf := make([]byte, size, size)
+
+	for i := range size {
+		reqBuf[i] = byte(rand.IntN(byteMax-byteMin+1) + byteMin)
+	}
+
 	reqBodyReader := bytes.NewReader(reqBuf)
 
 	resp, errPost := http.Post(fullURL, contentType, reqBodyReader)
